@@ -6,7 +6,7 @@ from scipy.stats import beta
 from scipy.stats import binom
 
 
-class SAIRS(object):
+class SIS(object):
    
     
     def __init__(self, states,belief):
@@ -24,14 +24,6 @@ class SAIRS(object):
     @property
     def num_actions(self):
         return len(self.actions)
-
-    def get_g(self,state):
-        p_fp=0.05
-        p_fn=0.1
-        pd_a=0.8
-        pd_i=0.8
-        g=p_fp+(1-p_fp-p_fn)*(pd_a*state[0][1]+pd_i*state[0][2])
-        return g
     
     def update_belief(self,c_states,c_belief, action,obs):     #update belief by rejective sampling
         n=len(self.states)
@@ -40,7 +32,6 @@ class SAIRS(object):
             idx=np.random.choice(np.linspace(0,len(self.states)-1,len(self.states)),p=c_belief)
             s_state=c_states[int(idx)]
             n_state=self.next_state(s_state,action,obs)
-            #if n_state[2]>=0:
             if self.gen_observation(n_state,action)[0]==obs[0]:
                     new_states.append(n_state)
         #print(new_states)
@@ -58,26 +49,23 @@ class SAIRS(object):
         for i in range(len(states)):
             if min_p>=states[i][2]:
                 min_p=states[i][2]
-        return np.linspace(0,min_p,min_p+1)
+        return np.linspace(0,int(min_p),int(min_p+1))
             
             
     
     
     def get_legal_actions(self, state):
-        return np.linspace(0,state[2],state[2]+1)
+        return np.linspace(0,int(state[2]),int(state[2]+1))
     
     
     def next_state(self,si,action,obs):
        
-        Si,Ai,Ii,Ri=si[0]
-        qi,betai,sigmai,gammai,kappai,deltai=si[1]
-        pi=si[2]
-        Sj=Si-betai*Si*(Ai+Ii)+deltai*Ri
-        Aj=Ai+qi*betai*Si*(Ai+Ii)-(kappai+sigmai)*Ai
-        Ij=Ii+(1-qi)*betai*Si*(Ai+Ii)+sigmai*Ai-gammai*Ii
-        Rj=Ri+kappai*Ai+gammai*Ii-deltai*Ri
+        Ii=si[0]
+        betai,gammai=si[1]
+  
+        Ij=-betai*Ii**2+(betai-gammai+1)*Ii
         nsta=[]
-        nsta.append(np.array([Sj,Aj,Ij,Rj]))
+        nsta.append(Ij)
         nsta.append(si[1])
         nsta.append(si[2]+obs[1]-action)
         if action in self.get_legal_actions(si):
@@ -88,7 +76,7 @@ class SAIRS(object):
         
     def gen_observation(self,state,action):
         obs=np.ones(2)
-        p_test=np.random.binomial(action,self.get_g(state))
+        p_test=np.random.binomial(action,state[0])
         n_arrival=np.random.poisson(3)
         obs[0]=int(p_test)
         obs[1]=int(n_arrival)
@@ -96,22 +84,20 @@ class SAIRS(object):
                          
 
     def observation_function(self, action, state, obs):
-        return binom.pmf(obs[0],action,self.get_g(state))*poisson.pmf(obs[1],3)
+        return binom.pmf(obs[0],action,state[0])*poisson.pmf(obs[1],3)
        
        
 
     def transition_function(self, action, si, sj,obs):
-        Sj,Aj,Ij,Rj=sj[0]
-        Si,Ai,Ii,Ri=si[0]
-        qj,betaj,sigmaj,gammaj,kappaj,deltaj=sj[1]
-        qi,betai,sigmai,gammai,kappai,deltai=si[1]
-        pj=sj[2]
-        pi=si[2]
-        ds=-betai*Si*(Ai+Ii)+deltai*Ri
-        da=qi*betai*Si*(Ai+Ii)-(kappai+sigmai)*Ai
-        di=(1-qi)*betai*Si*(Ai+Ii)+sigmai*Ai-gammai*Ii
-        dr=kappai*Ai+gammai*Ii-deltai*Ri      
-        if (Sj-Si==ds)&(Aj-Ai==da)&(Ij-Ii==di)&(Rj-Ri==dr)&(sj[1]==si[1]).all()&(pj==pi+obs[1]-action):
+        Ij=sj[0]
+        Ii=si[0]
+        betaj,gammaj=sj[1]
+        betai,gammai=si[1]
+        zj=sj[2]
+        zi=si[2]
+        di=-betai*Ii**2+(betai-gammai)*Ii
+
+        if (Ij-Ii==di)&(sj[1]==si[1]).all()&(zj==zi+obs[1]-action):
             prob=1
         else:
             prob=0  
